@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title></title>
+        <meta charset="UTF-8">  
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <canvas id="fractal" width="400" height="300" style="border:0.5px solid gray;"></canvas>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/5.6.0/math.min.js"></script>
+    </head>
+    <body>
+        <script>
+            canvas = document.getElementById("fractal") ;
+            canvas.addEventListener('mousemove', mouseMove) ;
+            canvas.addEventListener("mousedown", mouseDown) ;
+            canvas.addEventListener("mouseup", mouseUp);
+
+            ctx = canvas.getContext('2d') ;
+            var img = ctx.createImageData(canvas.clientWidth, canvas.clientHeight) ;
+            var maxIteration = 256;
+            var zoomScale = 1; //ount the zoom-in scale
+            var mouseIsDragging = false;
+            var mouseDownComplexNumber = math.complex(0,0) ;
+            var mouseUpComplexNumber = math.complex(0,0);
+            var fractalWidth =3;
+            var fractalWidth_origin = 3;
+            var fractalHeight = 2;
+            var fractalViewport = {
+                xmin:-2,
+                xmax: 1,
+                ymin:-1,
+                ymax: 1
+            }
+
+            var rect={ //the dragging rectangle
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 0
+            }
+            
+            
+            mandelbrot();
+
+            function pixelMapToComplex(x, y) { //change xy-pixel coordinates on complex plane
+                let z = math.complex(0,0);
+                z.re = fractalViewport.xmin + x / canvas.clientWidth * (fractalViewport.xmax - fractalViewport.xmin);
+                z.im = fractalViewport.ymin + y / canvas.clientHeight * (fractalViewport.ymax - fractalViewport.ymin); 
+                return z;
+            }
+
+            function mouseMove(event) {
+                x = event.clientX - canvas.offsetLeft ; //the relative position in img
+                y = event.clientY - canvas.offsetTop ;
+                document.getElementById("position").innerHTML =`Moving Coordinates: (${x}, ${y})`;
+                if (mouseIsDragging){
+                    rect.width = x - start_x ;
+
+                    if( (y<rect.y && rect.width >0) || (y>rect.y && rect.width <0) )
+                        rect.height = rect.width * (-3/4) ; //x,y are different sign
+                    else rect.height = rect.width * (3/4) ; //x,y are same sign
+                    ctx.putImageData(img, 0 ,0);
+                    drawRect();
+                    //console.log("drag:"+rect.width, rect.height);
+                }
+            }
+
+            function mouseDown(event){
+                mouseIsDragging = true;
+                start_x = event.clientX - canvas.offsetLeft ; //the relative position in img
+                start_y = event.clientY - canvas.offsetTop ; 
+                rect.x = start_x;
+                rect.y = start_y;
+                mouseDownComplexNumber = pixelMapToComplex(start_x, start_y);
+                document.getElementById("start_position").innerHTML = `mouseDown:(${start_x}, ${start_y})
+                        complex:${Math.floor(mouseDownComplexNumber.re * 100) / 100},${Math.floor(mouseDownComplexNumber.im * 100) / 100}i`;//show position and its complex number;
+            }
+            
+            function mouseUp(event) {
+                let end_x = event.clientX - canvas.offsetLeft ; //the relative end-up position in img
+                let end_y = event.clientY - canvas.offsetTop ;
+
+                mouseUpComplexNumber = pixelMapToComplex(start_x+rect.width, start_y+rect.height); //change the mouseUp position to complex number "z"
+                document.getElementById("start_position").innerHTML = `mouseUp: (${end_x},${end_y})  
+                        complex: ${Math.floor(mouseUpComplexNumber.re * 100) / 100},${Math.floor(mouseUpComplexNumber.im * 100) / 100}i`;//show position and its complex number
+                zoom();
+            }
+
+            function drawRect(){
+                ctx.strokeStyle = "black";
+                ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+            }
+
+            function zoom(){
+                //assign the new xmax, xmin, ymax, ymin, so the program can create a viewport
+                if(mouseUpComplexNumber.re > mouseDownComplexNumber.re){
+                    var xmaxNew = mouseUpComplexNumber.re ;
+                    var xminNew = mouseDownComplexNumber.re ;
+                }else{
+                    var xmaxNew = mouseDownComplexNumber.re ;
+                    var xminNew = mouseUpComplexNumber.re ;
+                } 
+
+                if(mouseUpComplexNumber.im > mouseDownComplexNumber.im){
+                    var ymaxNew = mouseUpComplexNumber.im ;
+                    var yminNew = mouseDownComplexNumber.im ;
+                }else{
+                    var ymaxNew = mouseDownComplexNumber.im ;
+                    var yminNew = mouseUpComplexNumber.im ;
+                } 
+
+                fractalViewport.xmin = xminNew;
+                fractalViewport.xmax = xmaxNew;
+                fractalViewport.ymin = yminNew;
+                fractalViewport.ymax = ymaxNew;
+
+                zoomScale = Math.floor (fractalWidth_origin / (xmaxNew - xminNew) *100) /100 ;
+                fractalWidth = Math.abs(fractalViewport.xmax - fractalViewport.xmin) ;
+                fractalHeight = Math.abs(fractalViewport.ymax - fractalViewport.ymin) ;
+                document.getElementById("zoom").innerHTML =`Zoom: ${zoomScale} X`;
+                
+                mandelbrot();
+                mouseIsDragging = false;
+            }
+
+            function mandelbrot(){
+                //console.log(fractalWidth, fractalHeight);
+                for( y=0; y<canvas.clientHeight; y++){
+                    for (x=0; x<canvas.clientWidth; x++){
+                        let c={ //c = a + bi on the complex plane
+                            x: x * fractalWidth/canvas.clientWidth + fractalViewport.xmin,
+                            y: y * fractalHeight/canvas.clientHeight + fractalViewport.ymin
+                        }
+                        let z={
+                            x:0,
+                            y:0
+                        }
+                        var iteration =0;
+                        do{
+                            let tempx = z.x* z.x - z.y*z.y + c.x ; //z = z^2 + c
+                            z.y = 2*z.x *z.y + c.y ;
+                            z.x = tempx ;
+                            iteration ++;
+                        }while(z.x*z.x + z.y*z.y <4 && iteration < maxIteration);
+
+                        let index =(y*canvas.clientWidth+x)*4; //color index
+                        img.data[index] = Math.floor((iteration+20) /maxIteration *255);
+                        img.data[index+1] = Math.floor(iteration*20/maxIteration *255) ;
+                        img.data[index+2] = 100;
+                        img.data[index+3] = 250;
+                    }
+                }
+                ctx.putImageData(img, 0, 0) ;
+            }
+
+            function reset() {
+                zoomScale = 1;
+                fractalWidth = fractalWidth_origin ;
+                fractalHeight = 2;
+                fractalViewport = {
+                    xmin:-2,
+                    xmax: 1,
+                    ymin:-1,
+                    ymax: 1
+                }
+                mandelbrot();
+            }
+        </script>
+
+        <p id="position"></p>
+        <p id="start_position"></p>
+        <p id="end_position"></p>
+        <p id="zoom"></p>
+        <input type="button" onclick="reset()" value="Reset">
+    </body>
+</html>
